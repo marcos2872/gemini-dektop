@@ -57,51 +57,44 @@ const App: React.FC = () => {
         init();
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+    const handleModelChange = (model: string) => {
+        setCurrentModel(model);
+        window.electronAPI.setModel(model)
+            .then(() => console.log('Model changed to', model))
+            .catch(err => console.error('Failed to change model', err));
+    };
+
     return (
-        <div className="app-container" style={{ flexDirection: 'row' }}>
-            <MCPServerPanel />
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100vh' }}>
-                <div className="app-header">
-                    <h1>Gemini Desktop</h1>
-                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {models.length > 0 && (
-                            <select
-                                value={currentModel}
-                                onChange={(e) => {
-                                    const model = e.target.value;
-                                    setCurrentModel(model);
-                                    window.electronAPI.setModel(model)
-                                        .then(() => console.log('Model changed to', model))
-                                        .catch(err => console.error('Failed to change model', err));
-                                }}
-                                style={{
-                                    padding: '0.4rem',
-                                    borderRadius: '4px',
-                                    border: '1px solid #444',
-                                    backgroundColor: '#2D2D2D',
-                                    color: '#fff',
-                                    marginRight: '8px',
-                                    maxWidth: '200px'
-                                }}
-                            >
-                                {models.map(m => (
-                                    <option key={m.name} value={m.name}>
-                                        {m.displayName}
-                                    </option>
-                                ))}
-                            </select>
-                        )}
-                        <button onClick={handleNewConversation} className="primary-btn" style={{ marginRight: '8px', padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>New Chat</button>
-                        <button onClick={() => setView('history')} className="primary-btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>History</button>
+        <div className="app-container" style={{ flexDirection: 'row', height: '100vh', display: 'flex' }}>
+            {/* Sidebar */}
+            <div style={{ width: '300px', display: 'flex', flexDirection: 'column', backgroundColor: '#252526', borderRight: '1px solid #3E3E42' }}>
+                {/* History Section - Top */}
+                <div style={{ height: '50%', borderBottom: '1px solid #3E3E42', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    <div style={{ padding: '1rem', borderBottom: '1px solid #3E3E42', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ margin: 0, fontSize: '1rem' }}>History</h3>
+                        <button onClick={handleNewConversation} style={{ background: 'none', border: '1px solid #4CAF50', color: '#4CAF50', borderRadius: '4px', cursor: 'pointer', padding: '2px 8px', fontSize: '0.8rem' }}>+ New</button>
+                    </div>
+                    <div style={{ flex: 1, overflowY: 'auto' }}>
+                        <ConversationHistory onSelect={handleSelectConversation} />
                     </div>
                 </div>
-                {view === 'chat' ? (
-                    <ChatInterface conversationId={currentConversationId} />
-                ) : (
-                    <ConversationHistory onSelect={handleSelectConversation} />
-                )}
+
+                {/* MCP Section - Bottom */}
+                <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <MCPServerPanel />
+                </div>
             </div>
-        </div >
+
+            {/* Main Content */}
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%' }}>
+                <ChatInterface
+                    conversationId={currentConversationId}
+                    models={models}
+                    currentModel={currentModel}
+                    onModelChange={handleModelChange}
+                />
+            </div>
+        </div>
     );
 };
 

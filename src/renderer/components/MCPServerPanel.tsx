@@ -73,7 +73,7 @@ const MCPServerPanel: React.FC = () => {
     };
 
     return (
-        <div style={{ width: '250px', backgroundColor: '#252526', borderRight: '1px solid #3E3E42', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ width: '100%', height: '100%', backgroundColor: '#252526', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '1rem', borderBottom: '1px solid #3E3E42', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0, fontSize: '1rem' }}>MCP Servers</h3>
                 <button onClick={handleAddClick} style={{ background: 'none', border: '1px solid #4B90F5', color: '#4B90F5', borderRadius: '4px', cursor: 'pointer' }}>+</button>

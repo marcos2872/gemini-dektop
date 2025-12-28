@@ -15,9 +15,13 @@ interface Message {
 
 interface ChatInterfaceProps {
     conversationId: string | null;
+    models: Array<{ name: string; displayName: string }>;
+    currentModel: string;
+    onModelChange: (model: string) => void;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, currentModel, onModelChange }) => {
+    // ... (existing state) ...
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -46,6 +50,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
     }, [conversationId]);
 
     const handleSubmit = async () => {
+        // ... (existing submit logic) ...
         if (!input.trim() || loading) return;
 
         const userMsg: Message = {
@@ -140,14 +145,34 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
                         fontFamily: 'inherit'
                     }}
                 />
-                <button
-                    onClick={handleSubmit}
-                    className="primary-btn"
-                    style={{ marginTop: '0.5rem', float: 'right' }}
-                    disabled={loading}
-                >
-                    Send
-                </button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <select
+                            value={currentModel}
+                            onChange={(e) => onModelChange(e.target.value)}
+                            style={{
+                                backgroundColor: '#1E1E1E',
+                                color: '#ECECEC',
+                                border: '1px solid #3E3E42',
+                                borderRadius: '4px',
+                                padding: '4px 8px',
+                                outline: 'none'
+                            }}
+                        >
+                            {models.map(m => (
+                                <option key={m.name} value={m.name}>{m.displayName}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <button
+                        onClick={handleSubmit}
+                        className="primary-btn"
+                        style={{ padding: '8px 24px' }}
+                        disabled={loading}
+                    >
+                        Send
+                    </button>
+                </div>
             </div>
         </div>
     );
