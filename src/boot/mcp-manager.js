@@ -40,7 +40,8 @@ class MCPServerManager {
             await this.ensureConfigDir();
             const content = await fs.readFile(this.configPath, 'utf8');
             const config = JSON.parse(content);
-            return Array.isArray(config.mcpServers) ? config.mcpServers : [];
+            const keys = Object.keys(config.mcpServers);
+            return keys.map(key => ({ name: key, ...config.mcpServers[key] }));
         } catch (error) {
             if (error.code === 'ENOENT') {
                 const defaultConfig = { mcpServers: [] };
