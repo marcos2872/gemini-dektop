@@ -20,13 +20,10 @@ function createWindow() {
     });
 
     if (process.env.IS_DEV) {
-        // In development, load from the Vite dev server
         mainWindow.loadURL('http://localhost:3000');
-        // Open DevTools automatically in dev
         // mainWindow.webContents.openDevTools();
-        // console.log('[Main] Loading from http://localhost:3000');
+
     } else {
-        // In production, load the built file
         mainWindow.loadFile(path.join(__dirname, '../../dist/renderer/index.html'));
     }
 }
