@@ -15,7 +15,7 @@ class GeminiClient {
     constructor(configPath) {
         this.configPath = configPath;
         this.apiKey = process.env.GEMINI_API_KEY;
-        this.modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+        this.modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
         this.genAI = null;
         this.model = null;
         this.chat = null;
@@ -59,9 +59,14 @@ class GeminiClient {
      * @param {string} prompt 
      * @returns {Promise<string>}
      */
-    async sendPrompt(prompt) {
+    /**
+     * Send a prompt to the model, optionally using MCP tools.
+     * @param {string} prompt 
+     * @param {Object} [mcpManager] - The MCP Manager instance
+     * @returns {Promise<string>}
+     */
+    async sendPrompt(prompt, mcpManager) {
         if (!this.genAI || !this.chat) {
-            // Try to initialize if not ready (e.g. key was added later)
             this.apiKey = process.env.GEMINI_API_KEY;
             if (this.apiKey) {
                 await this.initialize();
@@ -70,27 +75,140 @@ class GeminiClient {
             }
         }
 
-        // Add user message to local history (for UI/getHistory)
         this._addToHistory('user', prompt);
 
         try {
-            // Use streaming to capture chunks (supports future real-time features)
-            const result = await this.chat.sendMessageStream(prompt);
+            let tools = [];
+            let geminiTools = [];
 
-            let fullText = '';
-            for await (const chunk of result.stream) {
-                const chunkText = chunk.text();
-                fullText += chunkText;
+            if (mcpManager) {
+                tools = await mcpManager.getAllTools();
+                if (tools && tools.length > 0) {
+                    geminiTools = this._mapToolsToGemini(tools);
+                    // Re-initialize chat with tools if we have them
+                    // Note: This is a bit expensive but necessary to inject tools dynamically
+                    // We preserve history
+                    const currentHistory = await this.chat.getHistory();
+                    this.model = this.genAI.getGenerativeModel({
+                        model: this.modelName,
+                        tools: geminiTools
+                    });
+                    this.chat = this.model.startChat({
+                        history: currentHistory
+                    });
+                }
             }
 
-            // Add assistant message to local history
-            this._addToHistory('assistant', fullText);
+            console.log(`[Gemini] Sending prompt with ${tools.length} tools...`);
 
-            return fullText;
+            let result = await this.chat.sendMessage(prompt);
+            let response = result.response;
+            let text = response.text();
+
+            // Function Call Loop
+            // The SDK handles function calls by returning a part with functionCall
+            // We need to loop until the model returns just text
+            const maxTurns = 10;
+            let turn = 0;
+
+            while (turn < maxTurns) {
+                const functionCalls = response.functionCalls();
+                if (functionCalls && functionCalls.length > 0) {
+                    console.log('[Gemini] Model requested function calls:', JSON.stringify(functionCalls));
+
+                    const toolParts = [];
+                    for (const call of functionCalls) {
+                        try {
+                            const executionResult = await mcpManager.callTool(call.name, call.args);
+                            console.log(`[Gemini] Tool result for ${call.name}:`, executionResult);
+
+                            // Construct FunctionResponse
+                            toolParts.push({
+                                functionResponse: {
+                                    name: call.name,
+                                    response: { result: executionResult }
+                                }
+                            });
+                        } catch (err) {
+                            console.error(`[Gemini] Tool execution failed for ${call.name}:`, err);
+                            toolParts.push({
+                                functionResponse: {
+                                    name: call.name,
+                                    response: { error: err.message }
+                                }
+                            });
+                        }
+                    }
+
+                    // Send tool results back to model
+                    console.log('[Gemini] Sending tool outputs to model...');
+                    result = await this.chat.sendMessage(toolParts);
+                    response = result.response;
+                    text = response.text();
+                    turn++;
+                } else {
+                    // No more function calls, we are done
+                    break;
+                }
+            }
+
+            this._addToHistory('assistant', text);
+            return text;
+
         } catch (error) {
             console.error('[Gemini] Error sending message:', error);
             throw error;
         }
+    }
+
+    /**
+     * Map MCP tools to Gemini format
+     */
+    /**
+     * Map MCP tools to Gemini format
+     */
+    _mapToolsToGemini(mcpTools) {
+        return [{
+            functionDeclarations: mcpTools.map(tool => ({
+                name: this._sanitizeName(tool.name),
+                description: tool.description || `Tool ${tool.name}`,
+                parameters: this._sanitizeSchema(tool.inputSchema)
+            }))
+        }];
+    }
+
+    _sanitizeName(name) {
+        // Gemini names: ^[a-zA-Z0-9_-]+$
+        // Our namespaced names use __ which is valid (underscores).
+        // Just ensure no other chars.
+        return name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+
+    _sanitizeSchema(schema) {
+        if (!schema) {
+            return { type: 'OBJECT', properties: {} };
+        }
+
+        // Deep clone to avoid mutating original
+        const clean = JSON.parse(JSON.stringify(schema));
+
+        // Ensure type is OBJECT for root
+        if (!clean.type) {
+            clean.type = 'OBJECT';
+        }
+
+        // Remove unsupported fields for Gemini Function Declarations
+        delete clean.$schema;
+        delete clean.title;
+        delete clean.additionalProperties; // Gemini defaults to false/strict usually, strictly disallowed in some API versions
+
+        // Recursively clean properties if needed, ensuring types are strings
+        // For now, simple cleaning is often enough.
+        // Google Generative AI Node SDK expects 'type' to be capitalized often in older versions, 
+        // but let's try to trust the recent SDK handles standard JSON schema.
+        // However, we MUST ensure property keys are valid.
+
+        return clean;
     }
 
     _addToHistory(role, content) {
