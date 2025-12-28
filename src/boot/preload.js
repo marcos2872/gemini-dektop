@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ping: () => ipcRenderer.invoke('ping'),
     sendPrompt: (prompt) => ipcRenderer.invoke('gemini:prompt', prompt),
     getHistory: () => ipcRenderer.invoke('gemini:history'),
+    setModel: (modelName) => ipcRenderer.invoke('gemini:set-model', modelName),
 
     // MCP Configuration
     mcpList: () => ipcRenderer.invoke('mcp:list'),

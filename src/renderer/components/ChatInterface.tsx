@@ -95,12 +95,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
                     <div key={idx} style={{
                         marginBottom: '1rem',
                         alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                        backgroundColor: msg.role === 'user' ? '#2b2b2b' : 'transparent',
-                        padding: msg.role === 'user' ? '1rem' : '0',
-                        borderRadius: '8px'
+                        backgroundColor: msg.role === 'user' ? '#2b2b2b' : (msg.content.startsWith('Error:') ? 'rgba(255, 0, 0, 0.1)' : 'transparent'),
+                        padding: msg.role === 'user' || msg.content.startsWith('Error:') ? '1rem' : '0',
+                        borderRadius: '8px',
+                        border: msg.content.startsWith('Error:') ? '1px solid #700' : 'none'
                     }}>
-                        <strong style={{ color: msg.role === 'user' ? '#4B90F5' : '#9DA5B4' }}>
-                            {msg.role === 'user' ? 'You' : 'Gemini'}
+                        <strong style={{ color: msg.role === 'user' ? '#4B90F5' : (msg.content.startsWith('Error:') ? '#ff6b6b' : '#9DA5B4') }}>
+                            {msg.role === 'user' ? 'You' : (msg.content.startsWith('Error:') ? 'System Error' : 'Gemini')}
                         </strong>
                         <div style={{ whiteSpace: 'pre-wrap', marginTop: '0.5rem', lineHeight: '1.5' }}>
                             {msg.content}

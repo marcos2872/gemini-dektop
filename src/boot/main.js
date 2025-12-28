@@ -124,6 +124,16 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
     }
 });
 
+ipcMain.handle('gemini:set-model', async (event, modelName) => {
+    try {
+        await gemini.setModel(modelName);
+        return { success: true };
+    } catch (err) {
+        log('IPC', `Error setting model: ${err.message}`);
+        return { success: false, error: err.message };
+    }
+});
+
 ipcMain.handle('gemini:history', () => gemini.getHistory()); // Raw client history, distinct from conversation storage
 
 // Conversation Management Handlers

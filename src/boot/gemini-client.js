@@ -1,5 +1,5 @@
-const { spawn } = require('child_process');
-const fs = require('fs');
+require('dotenv').config();
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 /**
  * @typedef {Object} Message
@@ -10,178 +10,87 @@ const fs = require('fs');
 
 class GeminiClient {
     /**
-     * @param {string} [configPath] - Path to config file (optional for now)
+     * @param {string} [configPath] - Path to config file (optional)
      */
     constructor(configPath) {
         this.configPath = configPath;
-        this.process = null;
-        this.history = [];
-        this.initialized = false;
-        this.pendingResolver = null;
-        this.pendingRejecter = null;
-        this.buffer = '';
-        this.timeout = 30000; // 30s
-        this.isProcessing = false;
+        this.apiKey = process.env.GEMINI_API_KEY;
+        this.modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+        this.genAI = null;
+        this.model = null;
+        this.chat = null;
+        this.history = []; // Keep local history for getHistory() compatibility
     }
 
     /**
-     * Initialize the Gemini CLI process.
+     * Initialize the Gemini SDK.
      * @returns {Promise<void>}
      */
     async initialize() {
-        return new Promise((resolve, reject) => {
-            if (this.initialized && this.process) return resolve();
+        if (!this.apiKey) {
+            console.warn('[Gemini] GEMINI_API_KEY not found in environment variables. Initialization deferred.');
+            // We allow initialization to pass without key, but subsequent calls will fail or we can throw here.
+            // Only throw if we strictly need it now. The original wrapper didn't throw on constructor.
+            // But initialize() returns a Promise.
+            return;
+        }
 
-            try {
-                console.log('[Gemini] Spawning process...');
-                this.process = spawn('gemini', ['chat'], {
-                    stdio: ['pipe', 'pipe', 'pipe'],
-                    env: { ...process.env } // Remove FORCE_COLOR or TERM overrides that might confuse it
-                });
+        try {
+            this.genAI = new GoogleGenerativeAI(this.apiKey);
+            this.model = this.genAI.getGenerativeModel({ model: this.modelName });
 
-                let resolved = false;
+            // Initialize chat session
+            // Note: The SDK manages history in the chat session object.
+            // We also keep a local this.history for the UI compatibility.
+            // We can sync them if needed, but for now we start fresh.
+            this.chat = this.model.startChat({
+                history: [],
+            });
 
-                this.process.stdout.on('data', (chunk) => {
-                    const text = chunk.toString();
-                    console.log('[Gemini] stdout:', text);
-                    this.buffer += text;
-
-                    // Initialization check
-                    if (!resolved && text.toLowerCase().includes('ready')) {
-                        console.log('[Gemini] Detected ready signal.');
-                        this.initialized = true;
-                        resolved = true;
-                        resolve();
-                    }
-
-                    // Regular handling
-                    this._handleStdout(chunk);
-                });
-
-                this.process.stderr.on('data', (chunk) => {
-                    console.error('[Gemini] stderr:', chunk.toString());
-                    // Some tools print "ready" to stderr
-                    if (!resolved && chunk.toString().toLowerCase().includes('ready')) {
-                        console.log('[Gemini] Detected ready signal in stderr.');
-                        this.initialized = true;
-                        resolved = true;
-                        resolve();
-                    }
-                });
-
-                this.process.on('error', (err) => {
-                    console.error('[Gemini] Process error:', err);
-                    if (!resolved) { resolved = true; reject(err); }
-                });
-
-                this.process.on('close', (code) => {
-                    console.log(`[Gemini] Process exited with code ${code}`);
-                    this.initialized = false;
-                    this.process = null;
-                    if (!resolved) {
-                        resolved = true;
-                        reject(new Error(`Process exited early with code ${code}`));
-                    }
-                });
-
-            } catch (error) {
-                reject(error);
-            }
-        });
+            console.log(`[Gemini] SDK Initialized with model: ${this.modelName}`);
+        } catch (error) {
+            console.error('[Gemini] Failed to initialize SDK:', error);
+            throw error;
+        }
     }
 
     /**
-     * Send a prompt to the persistent CLI process.
+     * Send a prompt to the model.
      * @param {string} prompt 
      * @returns {Promise<string>}
      */
     async sendPrompt(prompt) {
-        if (!this.initialized || !this.process) {
-            console.log('[Gemini] Process not running, attempting to restart...');
-            await this.initialize();
-        }
-        if (this.isProcessing) {
-            throw new Error('Client is busy processing another request');
+        if (!this.genAI || !this.chat) {
+            // Try to initialize if not ready (e.g. key was added later)
+            this.apiKey = process.env.GEMINI_API_KEY;
+            if (this.apiKey) {
+                await this.initialize();
+            } else {
+                throw new Error('Gemini SDK not initialized. Missing API Key.');
+            }
         }
 
-        // Add to history
+        // Add user message to local history (for UI/getHistory)
         this._addToHistory('user', prompt);
 
-        return new Promise((resolve, reject) => {
-            this.isProcessing = true;
-            this.pendingResolver = resolve;
-            this.pendingRejecter = reject;
-            this.buffer = '';
+        try {
+            // Use streaming to capture chunks (supports future real-time features)
+            const result = await this.chat.sendMessageStream(prompt);
 
-            // Set timeout
-            const timeoutId = setTimeout(() => {
-                this._cleanupRequest();
-                reject(new Error('Timeout: Gemini CLI did not respond in 30s'));
-            }, this.timeout);
-
-            this.currentTimeoutId = timeoutId;
-
-            try {
-                // Write prompt to stdin
-                this.process.stdin.write(prompt + '\n');
-            } catch (err) {
-                clearTimeout(timeoutId);
-                this._cleanupRequest();
-                reject(err);
+            let fullText = '';
+            for await (const chunk of result.stream) {
+                const chunkText = chunk.text();
+                fullText += chunkText;
             }
-        });
-    }
 
-    /**
-     * Clean up internal state after request completion/failure
-     */
-    _cleanupRequest() {
-        this.isProcessing = false;
-        this.pendingResolver = null;
-        this.pendingRejecter = null;
-        if (this.currentTimeoutId) clearTimeout(this.currentTimeoutId);
-    }
+            // Add assistant message to local history
+            this._addToHistory('assistant', fullText);
 
-    /**
-     * Internal stdout handler
-     * WARNING: This logic relies on a heuristic for "end of message".
-     * Is Gemini CLI streaming? Does it end with a newline? 
-     * Since we don't have the real binary, I will implement a debounce strategy:
-     * Use a short debounce to guess end of stream if no specific delimiter is known.
-     * OR assumes the CLI prints a propmt token.
-     */
-    _handleStdout(chunk) {
-        const text = chunk.toString();
-        console.log('[Gemini] stdout:', text);
-        this.buffer += text;
-
-        // Heuristic: If we are waiting for a response, check if it seems complete.
-        // For many LLM CLIs, they stream tokens. We need to know when it stops.
-        // Strategy: Debounce 500ms. If no new data comes, assume done.
-        // NOTE: This is imperfect but standard for wrapping unknown CLIs without explicit delimiters.
-
-        if (this.isProcessing && this.debounceTimer) {
-            clearTimeout(this.debounceTimer);
+            return fullText;
+        } catch (error) {
+            console.error('[Gemini] Error sending message:', error);
+            throw error;
         }
-
-        if (this.isProcessing) {
-            this.debounceTimer = setTimeout(() => {
-                this._finalizeResponse();
-            }, 1000); // 1s silence = done
-        }
-    }
-
-    _finalizeResponse() {
-        if (!this.pendingResolver) return;
-
-        const response = this.buffer.trim();
-        this._addToHistory('assistant', response);
-        this.pendingResolver(response);
-        this._cleanupRequest();
-    }
-
-    _handleStderr(chunk) {
-        console.error('[Gemini] stderr:', chunk.toString());
     }
 
     _addToHistory(role, content) {
@@ -203,13 +112,20 @@ class GeminiClient {
     }
 
     shutdown() {
-        console.log('[Gemini] Shutting down...');
-        if (this.process) {
-            this.process.stdin.end();
-            this.process.kill(); // SIGTERM
-            this.process = null;
-        }
-        this.initialized = false;
+        // No explicit shutdown needed for HTTP API
+        this.chat = null;
+        this.genAI = null;
+        console.log('[Gemini] Client shut down.');
+    }
+
+    /**
+     * Set the current model and reset the session.
+     * @param {string} modelName
+     */
+    async setModel(modelName) {
+        console.log(`[Gemini] Switching model to: ${modelName}`);
+        this.modelName = modelName;
+        await this.initialize();
     }
 }
 

@@ -6,6 +6,7 @@ declare global {
             ping: () => Promise<string>;
             sendPrompt: (prompt: string) => Promise<{ success: boolean; data?: string; conversationId?: string; error?: string; mcpCalls?: any[] }>;
             getHistory: () => Promise<any[]>;
+            setModel: (modelName: string) => Promise<{ success: boolean; error?: string }>;
 
             // MCP
             mcpList: () => Promise<any[]>;
