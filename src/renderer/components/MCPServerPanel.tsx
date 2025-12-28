@@ -11,6 +11,8 @@ interface MCPServer {
 const MCPServerPanel: React.FC = () => {
     const [servers, setServers] = useState<MCPServer[]>([]);
     const [tools, setTools] = useState<any[]>([]);
+    const [resources, setResources] = useState<any[]>([]);
+    const [prompts, setPrompts] = useState<any[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [editingServer, setEditingServer] = useState<MCPServer | undefined>(undefined);
 
@@ -18,12 +20,18 @@ const MCPServerPanel: React.FC = () => {
         const list = await window.electronAPI.mcpList();
         setServers(list);
 
-        // Also load tools
+        // Also load tools, resources, prompts
         try {
-            const t = await window.electronAPI.mcpListTools();
+            const [t, r, p] = await Promise.all([
+                window.electronAPI.mcpListTools(),
+                window.electronAPI.mcpListResources(),
+                window.electronAPI.mcpListPrompts()
+            ]);
             setTools(t);
+            setResources(r);
+            setPrompts(p);
         } catch (e) {
-            console.error('Failed to load tools', e);
+            console.error('Failed to load MCP capabilities', e);
         }
     };
 
@@ -82,6 +90,8 @@ const MCPServerPanel: React.FC = () => {
             <div style={{ flex: 1, overflowY: 'auto' }}>
                 {Array.isArray(servers) && servers.map(s => {
                     const serverTools = tools.filter(t => t.serverName === s.name);
+                    const serverResources = resources.filter(r => r.serverName === s.name);
+                    const serverPrompts = prompts.filter(p => p.serverName === s.name);
                     const isEnabled = s.enabled !== false;
 
                     return (
@@ -121,14 +131,58 @@ const MCPServerPanel: React.FC = () => {
                                 </div>
                             )}
 
-                            <div style={{ display: 'flex', gap: '5px' }}>
+                            {
+                                serverResources.length > 0 && (
+                                    <div style={{ marginBottom: '0.5rem' }}>
+                                        <div style={{ fontSize: '0.7em', textTransform: 'uppercase', color: '#666', marginBottom: '2px' }}>Resources</div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                            {serverResources.map((r, i) => (
+                                                <span key={i} title={r.uri} style={{
+                                                    fontSize: '0.7rem',
+                                                    backgroundColor: '#2D333B',
+                                                    padding: '2px 4px',
+                                                    borderRadius: '3px',
+                                                    border: '1px solid #444',
+                                                    color: '#A8CD76'
+                                                }}>
+                                                    {r.name}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )
+                            }
+
+                            {
+                                serverPrompts.length > 0 && (
+                                    <div style={{ marginBottom: '0.5rem' }}>
+                                        <div style={{ fontSize: '0.7em', textTransform: 'uppercase', color: '#666', marginBottom: '2px' }}>Prompts</div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                            {serverPrompts.map((p, i) => (
+                                                <span key={i} title={p.description} style={{
+                                                    fontSize: '0.7rem',
+                                                    backgroundColor: '#3B2D3B',
+                                                    padding: '2px 4px',
+                                                    borderRadius: '3px',
+                                                    border: '1px solid #444',
+                                                    color: '#C586C0'
+                                                }}>
+                                                    {p.name}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )
+                            }
+
+                            < div style={{ display: 'flex', gap: '5px' }}>
                                 <button onClick={() => handleEditClick(s)} style={{ fontSize: '0.7rem', padding: '2px 5px' }}>Edit</button>
                                 <button onClick={() => handleDelete(s.name)} style={{ fontSize: '0.7rem', padding: '2px 5px', color: '#ff4444' }}>Del</button>
                             </div>
                         </div>
                     );
                 })}
-            </div>
+            </div >
 
             {showModal && (
                 <ServerModal
@@ -137,7 +191,7 @@ const MCPServerPanel: React.FC = () => {
                     onSave={handleSave}
                 />
             )}
-        </div>
+        </div >
     );
 };
 
