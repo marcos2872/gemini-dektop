@@ -316,6 +316,44 @@ class MCPServerManager {
             return true;
         } catch (e) {
             console.error(`Ping failed for ${name}:`, e);
+            return false;
+        }
+    }
+
+    /**
+     * Test a server configuration without saving it.
+     * @param {Object} config - { command, args, env }
+     * @returns {Promise<boolean>}
+     */
+    async testServerConfig(config) {
+        const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');
+        const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
+
+        if (!config.command) throw new Error('Command is required');
+
+        await this._validateCommand(config.command);
+
+        const transport = new StdioClientTransport({
+            command: config.command,
+            args: config.args || [],
+            env: { ...process.env, ...(config.env || {}) }
+        });
+
+        const client = new Client(
+            { name: "gemini-desktop-test", version: "1.0.0" },
+            { capabilities: { tools: {} } }
+        );
+
+        try {
+            await client.connect(transport);
+            await client.listTools();
+
+            // Cleanup
+            await transport.close().catch(() => { });
+            return true;
+        } catch (e) {
+            // Ensure cleanup
+            try { await transport.close().catch(() => { }); } catch { }
             throw e;
         }
     }

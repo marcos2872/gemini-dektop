@@ -220,6 +220,15 @@ ipcMain.handle('mcp:test', async (event, name) => {
     }
 });
 
+ipcMain.handle('mcp:test-config', async (event, config) => {
+    try {
+        const result = await mcpManager.testServerConfig(config);
+        return { success: true, connected: result };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
 ipcMain.handle('mcp:list-tools', async () => {
     try {
         return await mcpManager.getAllTools();

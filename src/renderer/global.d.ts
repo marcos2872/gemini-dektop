@@ -15,7 +15,9 @@ declare global {
             mcpAdd: (server: any) => Promise<{ success: boolean; error?: string }>;
             mcpRemove: (name: string) => Promise<{ success: boolean; error?: string }>;
             mcpUpdate: (name: string, updates: any) => Promise<{ success: boolean; error?: string }>;
+            mcpUpdate: (name: string, updates: any) => Promise<{ success: boolean; error?: string }>;
             mcpTest: (name: string) => Promise<{ success: boolean; connected?: boolean; error?: string }>;
+            mcpTestConfig: (config: any) => Promise<{ success: boolean; connected?: boolean; error?: string }>;
 
             // Conversation
             conversationNew: () => Promise<any>;

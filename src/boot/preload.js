@@ -13,7 +13,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     mcpAdd: (server) => ipcRenderer.invoke('mcp:add', server),
     mcpRemove: (name) => ipcRenderer.invoke('mcp:remove', name),
     mcpUpdate: (name, updates) => ipcRenderer.invoke('mcp:update', name, updates),
+    mcpUpdate: (name, updates) => ipcRenderer.invoke('mcp:update', name, updates),
     mcpTest: (name) => ipcRenderer.invoke('mcp:test', name),
+    mcpTestConfig: (config) => ipcRenderer.invoke('mcp:test-config', config),
 
     // Conversation Management
     conversationNew: () => ipcRenderer.invoke('conversation:new'),
