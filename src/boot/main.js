@@ -116,7 +116,44 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
         // Connect MCP servers if not already connected (best effort)
         await mcpManager.connectAll();
 
-        const response = await gemini.sendPrompt(prompt, mcpManager);
+        const response = await gemini.sendPrompt(prompt, mcpManager, async (toolName, args) => {
+            // Approval Callback
+            return new Promise((resolve) => {
+                const win = BrowserWindow.getAllWindows()[0];
+                if (!win) {
+                    resolve(true); // Default to allow if no window? Or deny?
+                    return;
+                }
+
+                // unique ID for this request? For now assume sequential
+                log('IPC', `Asking approval for ${toolName}`);
+                win.webContents.send('gemini:approval-request', { toolName, args });
+
+                // One-time listener for response
+                ipcMain.once('gemini:approval-response', (event, { approved }) => {
+                    log('IPC', `Approval received: ${approved}`);
+
+                    // Log the event to history
+                    const statusMsg = {
+                        id: crypto.randomUUID(),
+                        role: 'system',
+                        content: approved
+                            ? `✅ Allowed: ${toolName}\nArgs: ${JSON.stringify(args, null, 2)}`
+                            : `❌ Denied: ${toolName}`,
+                        timestamp: new Date().toISOString()
+                    };
+                    activeConversation.messages.push(statusMsg);
+
+                    // Send real-time update to renderer
+                    const win = BrowserWindow.getAllWindows()[0];
+                    if (win) {
+                        win.webContents.send('conversation:update', activeConversation);
+                    }
+
+                    resolve(approved);
+                });
+            });
+        });
 
         // Add Assistant Message
         const assistantMsg = {
@@ -134,6 +171,25 @@ ipcMain.handle('gemini:prompt', async (event, prompt) => {
         return { success: true, data: response, conversationId: activeConversation.id };
     } catch (err) {
         log('IPC', `Error processing prompt: ${err.message}`);
+
+        // Add Error Message to History
+        const errorMsg = {
+            id: crypto.randomUUID(),
+            role: 'assistant', // Use assistant role so it renders in the chat flow
+            content: `Error: ${err.message}`, // Prefix with Error: for styling
+            timestamp: new Date().toISOString()
+        };
+        activeConversation.messages.push(errorMsg);
+
+        // Save and Notify
+        await storage.saveConversation(activeConversation);
+
+        const win = BrowserWindow.getAllWindows()[0];
+        if (win) {
+            win.webContents.send('conversation:update', activeConversation);
+        }
+
+        // Return false so UI knows it failed (though it might just re-render via update)
         return { success: false, error: err.message };
     }
 });

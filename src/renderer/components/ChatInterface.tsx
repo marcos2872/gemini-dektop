@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 interface Message {
-    role: 'user' | 'assistant';
+    role: 'user' | 'assistant' | 'system';
     content: string;
     timestamp: string;
     mcpCalls?: Array<{
@@ -93,7 +93,51 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, c
         }
     };
 
+    const [approvalRequest, setApprovalRequest] = useState<{ toolName: string; args: any } | null>(null);
+
+    useEffect(() => {
+        const handleApproval = (data: { toolName: string; args: any }) => {
+            setApprovalRequest(data);
+        };
+
+        if (window.electronAPI.onApprovalRequest) {
+            window.electronAPI.onApprovalRequest(handleApproval);
+        }
+    }, []);
+
+    const handleApprovalResponse = (approved: boolean) => {
+        window.electronAPI.sendApprovalResponse(approved);
+        setApprovalRequest(null);
+    };
+
+    // Listen for real-time history updates (e.g. system messages from backend)
+    useEffect(() => {
+        if (window.electronAPI.onConversationUpdate) {
+            window.electronAPI.onConversationUpdate((updatedConversation: any) => {
+                if (updatedConversation.id === conversationId) {
+                    // We need to trigger a re-render/update
+                    // Since ChatInterface fetches history on load/id change, 
+                    // we might need to manually update local messages or trigger reload.
+                    // Ideally, ChatInterface should just receive messages as props or 
+                    // setMessages locally.
+                    // But here we're fetching in useEffect.
+
+                    // Let's assume the component manages its own 'messages' state.
+                    // We should merge or replace.
+                    window.electronAPI.conversationLoad(updatedConversation.id).then(conv => {
+                        if (conv) setMessages(conv.messages);
+                    });
+                }
+            });
+        }
+    }, [conversationId]); // Re-bind if ID changes
+
     const formatContent = (content: string) => {
+        // System status messages
+        if (content.startsWith('✅') || content.startsWith('❌')) {
+            return content;
+        }
+
         if (content.startsWith('Error:')) {
             // Check for GoogleGenerativeAI specific errors
             if (content.includes('[GoogleGenerativeAI Error]')) {
@@ -121,21 +165,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, c
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative' }}>
             <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
                 {Array.isArray(messages) && messages.map((msg, idx) => (
                     <div key={idx} style={{
                         marginBottom: '1rem',
-                        alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                        backgroundColor: msg.role === 'user' ? '#2b2b2b' : (msg.content.startsWith('Error:') ? 'rgba(255, 0, 0, 0.1)' : 'transparent'),
+                        alignSelf: msg.role === 'user' ? 'flex-end' : (msg.role === 'system' ? 'center' : 'flex-start'),
+                        backgroundColor: msg.role === 'user' ? '#2b2b2b' : (
+                            msg.role === 'system' ? 'transparent' :
+                                (msg.content.startsWith('Error:') ? 'rgba(255, 0, 0, 0.1)' : 'transparent')
+                        ),
                         padding: msg.role === 'user' || msg.content.startsWith('Error:') ? '1rem' : '0',
                         borderRadius: '8px',
-                        border: msg.content.startsWith('Error:') ? '1px solid #700' : 'none'
+                        border: msg.content.startsWith('Error:') ? '1px solid #700' : 'none',
+                        maxWidth: '80%',
+                        textAlign: msg.role === 'system' ? 'center' : 'left',
+                        fontStyle: msg.role === 'system' ? 'italic' : 'normal',
+                        opacity: msg.role === 'system' ? 0.7 : 1
                     }}>
-                        <strong style={{ color: msg.role === 'user' ? '#4B90F5' : (msg.content.startsWith('Error:') ? '#ff6b6b' : '#9DA5B4') }}>
-                            {msg.role === 'user' ? 'You' : (msg.content.startsWith('Error:') ? 'System Error' : 'Gemini')}
-                        </strong>
-                        <div style={{ whiteSpace: 'pre-wrap', marginTop: '0.5rem', lineHeight: '1.5' }}>
+                        {msg.role !== 'system' && (
+                            <strong style={{ color: msg.role === 'user' ? '#4B90F5' : (msg.content.startsWith('Error:') ? '#ff6b6b' : '#9DA5B4') }}>
+                                {msg.role === 'user' ? 'You' : (msg.content.startsWith('Error:') ? 'System Error' : 'Gemini')}
+                            </strong>
+                        )}
+                        <div style={{ whiteSpace: 'pre-wrap', marginTop: msg.role === 'system' ? '0' : '0.5rem', lineHeight: '1.5' }}>
                             {formatContent(msg.content)}
                         </div>
                         {msg.mcpCalls && msg.mcpCalls.length > 0 && (
@@ -153,7 +206,33 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId, models, c
                 <div ref={messagesEndRef} />
             </div>
 
-            <div style={{ padding: '1rem', borderTop: '1px solid #3E3E42', backgroundColor: '#252526' }}>
+            {/* Approval Modal */}
+            {approvalRequest && (
+                <div style={{
+                    position: 'absolute', bottom: '80px', left: '20px', right: '20px',
+                    backgroundColor: '#1E1E1E', border: '1px solid #4CAF50', borderRadius: '8px',
+                    padding: '1rem', boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+                    zIndex: 100
+                }}>
+                    <strong style={{ color: '#4CAF50', display: 'block', marginBottom: '0.5rem' }}>⚡ Tool Execution Requested</strong>
+                    <div style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>
+                        Gemini wants to run <strong>{approvalRequest.toolName}</strong> with arguments:
+                        <pre style={{ backgroundColor: '#252526', padding: '0.5rem', borderRadius: '4px', overflowX: 'auto', marginTop: '0.5rem' }}>
+                            {JSON.stringify(approvalRequest.args, null, 2)}
+                        </pre>
+                    </div>
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                        <button onClick={() => handleApprovalResponse(true)} style={{
+                            backgroundColor: '#4CAF50', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold'
+                        }}>Allow</button>
+                        <button onClick={() => handleApprovalResponse(false)} style={{
+                            backgroundColor: '#ff6b6b', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer'
+                        }}>Deny</button>
+                    </div>
+                </div>
+            )}
+
+            <div style={{ padding: '1rem', borderTop: '1px solid #3E3E42', backgroundColor: '#1E1E1E' }}>
                 <textarea
                     value={input}
                     onChange={(e) => setInput(e.target.value)}

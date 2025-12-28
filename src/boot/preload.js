@@ -22,5 +22,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     conversationLoad: (id) => ipcRenderer.invoke('conversation:load', id),
     conversationList: () => ipcRenderer.invoke('conversation:list'),
     conversationDelete: (id) => ipcRenderer.invoke('conversation:delete', id),
-    conversationExport: (id, format) => ipcRenderer.invoke('conversation:export', id, format)
+    conversationExport: (id, format) => ipcRenderer.invoke('conversation:export', id, format),
+    onConversationUpdate: (callback) => ipcRenderer.on('conversation:update', (event, conversation) => callback(conversation)),
+    // Tool Approval
+    onApprovalRequest: (callback) => ipcRenderer.on('gemini:approval-request', (event, data) => callback(data)),
+    sendApprovalResponse: (approved) => ipcRenderer.send('gemini:approval-response', { approved })
+
 });

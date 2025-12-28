@@ -25,6 +25,10 @@ declare global {
             conversationList: () => Promise<any[]>;
             conversationDelete: (id: string) => Promise<{ success: boolean }>;
             conversationExport: (id: string, format: string) => Promise<string>;
+            onConversationUpdate: (callback: (conversation: any) => void) => void;
+            // Approval
+            onApprovalRequest: (callback: (data: { toolName: string; args: any }) => void) => void;
+            sendApprovalResponse: (approved: boolean) => void;
         };
     }
 }

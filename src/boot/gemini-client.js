@@ -63,9 +63,10 @@ class GeminiClient {
      * Send a prompt to the model, optionally using MCP tools.
      * @param {string} prompt 
      * @param {Object} [mcpManager] - The MCP Manager instance
+     * @param {Function} [onApproval] - Async callback (toolName, args) => Promise<boolean>
      * @returns {Promise<string>}
      */
-    async sendPrompt(prompt, mcpManager) {
+    async sendPrompt(prompt, mcpManager, onApproval) {
         if (!this.genAI || !this.chat) {
             this.apiKey = process.env.GEMINI_API_KEY;
             if (this.apiKey) {
@@ -119,6 +120,15 @@ class GeminiClient {
                     const toolParts = [];
                     for (const call of functionCalls) {
                         try {
+                            // Check for approval before executing the tool
+                            if (typeof onApproval === 'function') {
+                                const approved = await onApproval(call.name, call.args);
+                                if (!approved) {
+                                    console.log(`[Gemini] Tool execution for ${call.name} rejected by onApproval.`);
+                                    throw new Error("User denied tool execution.");
+                                }
+                            }
+
                             const executionResult = await mcpManager.callTool(call.name, call.args);
                             console.log(`[Gemini] Tool result for ${call.name}:`, executionResult);
 
