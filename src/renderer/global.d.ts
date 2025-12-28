@@ -7,6 +7,7 @@ declare global {
             sendPrompt: (prompt: string) => Promise<{ success: boolean; data?: string; conversationId?: string; error?: string; mcpCalls?: any[] }>;
             getHistory: () => Promise<any[]>;
             setModel: (modelName: string) => Promise<{ success: boolean; error?: string }>;
+            listModels: () => Promise<Array<{ name: string; displayName: string }>>;
 
             // MCP
             mcpList: () => Promise<any[]>;

@@ -127,6 +127,47 @@ class GeminiClient {
         this.modelName = modelName;
         await this.initialize();
     }
+
+    /**
+     * List available models using the REST API.
+     * @returns {Promise<Array<{name: string, displayName: string}>>}
+     */
+    async listModels() {
+        if (!this.apiKey) return [];
+
+        return new Promise((resolve, reject) => {
+            const https = require('https');
+            const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${this.apiKey}`;
+
+            https.get(url, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const json = JSON.parse(data);
+                        if (json.models) {
+                            const validModels = json.models
+                                .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
+                                .map(m => ({
+                                    name: m.name.replace('models/', ''),
+                                    displayName: m.displayName || m.name.replace('models/', '')
+                                }));
+                            resolve(validModels);
+                        } else {
+                            console.warn('[Gemini] Unexpected response listing models:', json);
+                            resolve([]);
+                        }
+                    } catch (e) {
+                        console.error('[Gemini] Failed to parse model list:', e);
+                        resolve([]);
+                    }
+                });
+            }).on('error', (err) => {
+                console.error('[Gemini] Failed to list models:', err);
+                resolve([]);
+            });
+        });
+    }
 }
 
 module.exports = GeminiClient;
