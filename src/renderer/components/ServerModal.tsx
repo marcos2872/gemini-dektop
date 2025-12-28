@@ -33,8 +33,20 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
     });
     const [error, setError] = useState<string | null>(null);
 
+    const [testPassed, setTestPassed] = useState(false);
+
+    // Reset test passed status when content changes
+    const handleJsonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setJsonContent(e.target.value);
+        setTestPassed(false);
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (!testPassed) {
+            setError("Please successfully test the connection before saving.");
+            return;
+        }
         setError(null);
 
         try {
@@ -68,6 +80,7 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
 
     const handleTest = async () => {
         setError(null);
+        setTestPassed(false);
         try {
             const wrappedJson = `{${jsonContent}}`;
             const parsed = JSON.parse(wrappedJson);
@@ -84,6 +97,7 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
 
             if (res.success && res.connected) {
                 alert("✅ Connection successful!");
+                setTestPassed(true);
             } else {
                 setError(`Connection failed: ${res.error}`);
             }
@@ -108,7 +122,7 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
                         <textarea
                             required
                             value={jsonContent}
-                            onChange={e => setJsonContent(e.target.value)}
+                            onChange={handleJsonChange}
                             style={{
                                 flex: 1,
                                 minHeight: '300px',
@@ -129,8 +143,13 @@ const ServerModal: React.FC<ServerModalProps> = ({ server, onClose, onSave }) =>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                         <button type="button" onClick={handleTest} style={{ background: '#333', border: '1px solid #555', color: 'white', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', marginRight: 'auto' }}>Test Connection</button>
                         <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: '#9DA5B4', cursor: 'pointer' }}>Cancel</button>
-                        <button type="submit" className="primary-btn" style={{
-                            padding: '6px 12px', backgroundColor: '#007acc', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'
+                        <button type="submit" className="primary-btn" disabled={!testPassed} style={{
+                            padding: '6px 12px',
+                            backgroundColor: testPassed ? '#007acc' : '#555',
+                            color: testPassed ? 'white' : '#aaa',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: testPassed ? 'pointer' : 'not-allowed'
                         }}>Save</button>
                     </div>
                 </form>

@@ -5,7 +5,7 @@
   "main": "src/boot/main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "vite build && electron .",
+    "dev": "IS_DEV=true vite & sleep 5 && IS_DEV=true electron .",
     "build": "vite build",
     "watch": "vite build --watch"
   },
